@@ -5,7 +5,7 @@ import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 
-const googleApiKey = "AIzaSyBLR3iEOULZSNtuNNhhGLIpTASvwxvVLg4";
+const googleApiKey = "YOUR_GOOGLE_API_KEY";
 
 class GoogleMapPage extends StatefulWidget {
   const GoogleMapPage({Key? key}) : super(key: key);

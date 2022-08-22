@@ -8,7 +8,7 @@ import io.flutter.plugins.GeneratedPluginRegistrant
 
 class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
-        MapKitFactory.setApiKey("acd191bb-dafb-485f-b131-b60ef3913a41")
+        MapKitFactory.setApiKey("YOUR_YANDEX_API_KEY")
         super.configureFlutterEngine(flutterEngine)
     }
 }
