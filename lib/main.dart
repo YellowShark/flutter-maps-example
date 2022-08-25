@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:maps_example/list_page.dart';
 import 'package:maps_example/yandex_map_page.dart';
 
 import 'google_map_page.dart';
@@ -15,10 +16,16 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-        title: 'Flutter Demo',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-        ),
-        home: const YandexMapPage());
+      title: 'Flutter Demo',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      routes: {
+        'list': (_) => const ListPage(),
+        'map': (_) => const YandexMapPage(),
+      },
+      initialRoute: 'list',
+      //home: const YandexMapPage(),
+    );
   }
 }

@@ -3,7 +3,18 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:location/location.dart';
+import 'package:maps_example/saved_location.dart';
 import 'package:yandex_mapkit/yandex_mapkit.dart';
+
+final colors = [
+  Colors.green,
+  Colors.orange,
+  Colors.yellowAccent,
+  Colors.red,
+  Colors.blueAccent,
+  Colors.pink,
+  Colors.purple,
+];
 
 class YandexMapPage extends StatefulWidget {
   const YandexMapPage({Key? key}) : super(key: key);
@@ -15,9 +26,13 @@ class YandexMapPage extends StatefulWidget {
 class _YandexMapPageState extends State<YandexMapPage> {
   final _location = Location();
   final List<MapObject> _mapObjects = [];
+  final _selectedPoints = <Point>[];
   late YandexMapController _controller;
-  final MapObjectId _mapObjectId = const MapObjectId('raw_icon_placemark');
+  final MapObjectId _startMapObjectId = const MapObjectId('start_placemark');
+  final MapObjectId _endMapObjectId = const MapObjectId('end_placemark');
+  final MapObjectId _polylineMapObjectId = const MapObjectId('polyline');
   late final Uint8List _placemarkIcon;
+  Point? selectedPoint;
 
   @override
   Widget build(BuildContext context) {
@@ -34,9 +49,38 @@ class _YandexMapPageState extends State<YandexMapPage> {
               child: YandexMap(
                 mapObjects: _mapObjects, // объекты, которые будут на карте
                 onMapCreated: _onMapCreated, // метод, который вызывает при создании. через него мы получаем контроллер
-                onMapTap: _addMarker, // обработчик нажатия на карту
+                onMapTap: _onMarkerChanged, // обработчик нажатия на карту
               ),
             ),
+          ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: FloatingActionButton(
+              onPressed: () async {
+                if (selectedPoint == null) return;
+                var resultWithSession = await YandexSearch.searchByPoint(
+                  point: selectedPoint!,
+                  searchOptions: const SearchOptions(),
+                ).result;
+                final savedLocation = SavedLocation(resultWithSession.items?.first.name ?? '', selectedPoint!);
+                Navigator.pop(context, savedLocation);
+              },
+              child: const Text("Save"),
+            ),
+          ),
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                _mapObjects.clear();
+                _selectedPoints.clear();
+              });
+            },
+            child: const Text("Сброс"),
           ),
         ],
       ),
@@ -77,26 +121,140 @@ class _YandexMapPageState extends State<YandexMapPage> {
     _placemarkIcon = await _rawPlacemarkImage();
     // Определяем точку с текущей позицией
     final point = Point(latitude: locationData.latitude!, longitude: locationData.longitude!);
+    selectedPoint = point;
+
+    final result = await YandexSuggest.getSuggestions(
+      text: 'Cafe',
+      boundingBox: BoundingBox(
+        northEast: point,
+        southWest: Point(
+          latitude: point.latitude - 5,
+          longitude: point.longitude - 5,
+        ),
+      ),
+      suggestOptions: const SuggestOptions(suggestType: SuggestType.geo),
+    ).result;
+
+    result.items?.forEach((element) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            element.props.toString(),
+          ),
+        ),
+      );
+    });
+
+
     // Добавляем маркер
     await _addMarker(point);
-    // Двигаем камеру к точке
-    await _controller.moveCamera(CameraUpdate.newCameraPosition(CameraPosition(target: point)));
   }
 
   Future _addMarker(Point point) async {
-    _mapObjects.add(
-      // PlacemarkMapObject означает отметку на карте в виде обычной точки
-      PlacemarkMapObject(
-        mapId: _mapObjectId,
-        point: point,
-        icon: PlacemarkIcon.single(
-          PlacemarkIconStyle(
-            image: BitmapDescriptor.fromBytes(_placemarkIcon),
+    // Если нет ни одной отметки, то просто ставим отметку на карте
+    if (_selectedPoints.isEmpty) {
+      _mapObjects.add(
+        // PlacemarkMapObject означает отметку на карте в виде обычной точки
+        PlacemarkMapObject(
+          mapId: _startMapObjectId,
+          point: point,
+          icon: PlacemarkIcon.single(
+            PlacemarkIconStyle(
+              image: BitmapDescriptor.fromBytes(_placemarkIcon),
+            ),
           ),
         ),
-      ),
-    );
-    setState(() {});
+      );
+    } else {
+      // Если хотя бы 2 отметки на карте, то стороим между ними маршрут
+
+      // Сначала отметим на карте конечную точку
+      _mapObjects.add(
+        PlacemarkMapObject(
+          mapId: _endMapObjectId,
+          point: point,
+          icon: PlacemarkIcon.single(
+            PlacemarkIconStyle(
+              image: BitmapDescriptor.fromBytes(_placemarkIcon),
+            ),
+          ),
+        ),
+      );
+
+      // Теперь рассчитаем путь
+      /// Объект `YandexDriving` предназначен для построения маршрута. В его метод `requestRoutes()`
+      /// мы передаем точки, которые преобразуем в точки для построения маршрута, где в `requestPointType` мы указываем,
+      /// что это точки нашего пути. `DrivingOptions` оставляем по умолчанию. В результате нам приходит список
+      /// с несколькими путями, но из него мы выбираем самый первый и наносим точку на карту.
+      ///
+      final result = await YandexBicycle.requestRoutes(
+        points: [_selectedPoints.first, point]
+            .map(
+              (p) => RequestPoint(
+                point: p,
+                requestPointType: RequestPointType.wayPoint,
+              ),
+            )
+            .toList(),
+        bicycleVehicleType: BicycleVehicleType.scooter,
+      ).result;
+
+      var i = 0;
+      result.routes?.forEach((route) {
+        final id = MapObjectId('polyline$i');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              route.weight.time.text,
+            ),
+          ),
+        );
+        _mapObjects.add(
+          // PolylineMapObject означает отметку на карте в виде кривой со множеством точек
+          PolylineMapObject(
+            mapId: id,
+            polyline: Polyline(
+              points: route.geometry,
+            ),
+            strokeColor: colors[i % 7],
+            strokeWidth: 7.5,
+            outlineColor: Colors.yellow[200]!,
+            outlineWidth: 2.0,
+          ),
+        );
+        i++;
+      });
+
+      // // Добавим на карту кривую с полным путём
+      // _mapObjects.add(
+      //   // PolylineMapObject означает отметку на карте в виде кривой со множеством точек
+      //   PolylineMapObject(
+      //     mapId: _polylineMapObjectId,
+      //     polyline: Polyline(
+      //       points: result.routes?.first.geometry ?? [],
+      //     ),
+      //     strokeColor: Colors.orange[700]!,
+      //     strokeWidth: 7.5,
+      //     outlineColor: Colors.yellow[200]!,
+      //     outlineWidth: 2.0,
+      //   ),
+      // );
+    }
+
+    // Обновляем экран
+    setState(() {
+      _selectedPoints.add(point);
+    });
+
+    // Двигаем карту к точке
+    await _controller.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: point),
+        ),
+        // Плавные переход к точке
+        animation: const MapAnimation(
+          duration: 1,
+        ));
   }
 
   Future<Uint8List> _rawPlacemarkImage() async {
@@ -121,5 +279,31 @@ class _YandexMapPageState extends State<YandexMapPage> {
     final pngBytes = await image.toByteData(format: ImageByteFormat.png);
 
     return pngBytes!.buffer.asUint8List();
+  }
+
+  void _onMarkerChanged(Point point) async {
+    selectedPoint = point;
+    setState(() {
+      _mapObjects.add(
+        // PlacemarkMapObject означает отметку на карте в виде обычной точки
+        PlacemarkMapObject(
+          mapId: _startMapObjectId,
+          point: point,
+          icon: PlacemarkIcon.single(
+            PlacemarkIconStyle(
+              image: BitmapDescriptor.fromBytes(_placemarkIcon),
+            ),
+          ),
+        ),
+      );
+    });
+    await _controller.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: point),
+        ),
+        // Плавные переход к точке
+        animation: const MapAnimation(
+          duration: 1,
+        ));
   }
 }

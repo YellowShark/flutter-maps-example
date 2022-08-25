@@ -5,7 +5,7 @@ import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 
-const googleApiKey = "YOUR_GOOGLE_API_KEY";
+const googleApiKey = "AIzaSyBLR3iEOULZSNtuNNhhGLIpTASvwxvVLg4";
 
 class GoogleMapPage extends StatefulWidget {
   const GoogleMapPage({Key? key}) : super(key: key);
@@ -21,6 +21,49 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   Set<Marker> markers = {};
   Map<PolylineId, Polyline> polylines = {};
   List<LatLng> polylineCoordinates = [];
+
+  @override
+  initState() {
+    super.initState();
+    _checkLocationPermission();
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Map page"),
+      ),
+      body: GoogleMap(
+        initialCameraPosition: const CameraPosition(
+          target: LatLng(50.45, 30.52),
+          zoom: 15,
+        ),
+        myLocationEnabled: true,
+        myLocationButtonEnabled: true,
+        onMapCreated: _onMapCreated,
+        markers: markers,
+        polylines: polylines.values.toSet(),
+        onTap: _addMarker,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          setState(() {
+            markers.clear();
+            polylines.clear();
+          });
+        },
+        child: const Text("Сброс"),
+      ),
+    );
+  }
 
   void _onMapCreated(GoogleMapController mapController) {
     _controller.complete(mapController);
@@ -69,53 +112,10 @@ class _GoogleMapPageState extends State<GoogleMapPage> {
   }
 
   _addPolyLine() {
-    PolylineId id = PolylineId("poly");
+    PolylineId id = const PolylineId("poly");
     Polyline polyline = Polyline(
         polylineId: id, color: Colors.red, points: polylineCoordinates);
     polylines[id] = polyline;
     setState(() {});
-  }
-
-  @override
-  initState() {
-    super.initState();
-    _checkLocationPermission();
-  }
-
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Map page"),
-      ),
-      body: GoogleMap(
-        initialCameraPosition: const CameraPosition(
-          target: LatLng(50.45, 30.52),
-          zoom: 15,
-        ),
-        myLocationEnabled: true,
-        myLocationButtonEnabled: true,
-        onMapCreated: _onMapCreated,
-        markers: markers,
-        polylines: Set.of(polylines.values),
-        onTap: _addMarker,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          setState(() {
-            markers.clear();
-            polylines.clear();
-          });
-        },
-        child: const Text("Сброс"),
-      ),
-    );
   }
 }
